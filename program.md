@@ -34,7 +34,7 @@ You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times
 - Do not use any of the data files other than `train.csv`. Only `data/train.csv` may be read in `train.py`; `data/eval.csv` is read by `harness.py` for evaluation only. Never read, open, or inspect `data/holdout.csv` or the source data `2005.csv` (which contains the held-out rows) in any way, wherever it is stored. If you need a validation set (e.g. for early stopping), split it off `train.csv`.
 - Do not read, run, or reference `check_groundtruth.py`, `run_groundtruth_all.sh` or `plot_auc_history.py`, and do not read their outputs `groundtruth_all.tsv` and `auc_history.png`. These are human-only tools for post-hoc evaluation of experiments against the held-out test set. They are never part of the experiment loop. If you find yourself wanting to use them, stop and tell the human immediately — it means something has gone wrong with your understanding of the task.
 - Do not use git to peek at earlier results, especially into earlier versions of `results.tsv`, `groundtruth_all.tsv` or any other .tsv, .txt or .png files with earlier results. 
-- Do not peek into results in the `analysis` or `docs` folders and their sub-folders.
+- Do not peek into results in the `results`, `analysis` or `docs` folders and their sub-folders (archived earlier runs, including their ground truth scores).
 
 
 ## Research
@@ -62,7 +62,7 @@ You are expected to actively search the web and read external resources througho
 
 **Important:** Research time does not count against the per-run time limits (it does count against the 2-hour time budget). Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
 
-**The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such early stopping. Be creative! The only constraint is that the code runs without crashing and finishes in reasonable time.
+**The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such as early stopping. Be creative! The only constraint is that the code runs without crashing and finishes in reasonable time.
 
 **Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome - that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 AUC improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 AUC improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 
@@ -126,15 +126,15 @@ Counts of rows in particular are not usable as features in this setup, in any fo
 
 ## Output format
 
-Once the run finishes it prints a summary like this:
+Once the run finishes it prints a summary like this (the baseline `train.py`):
 
 ```
-Training time: 0.2s
+Training time: 0.3s
 Training done, evaluating...
-Artifact: artifacts/cb4bfa5ac7cc84eee42470888843d097422ce13a.pkl (0.8 MB)
-Eval time: 30.1s
-Eval AUC: 0.7526
-Run time: 31.4s (training 1.1s, eval 30.3s, ok)
+Artifact: artifacts/cc4d41fb286e4e6edde95798eb80427b186988e6.pkl (0.8 MB)
+Eval time: 30.8s
+Eval AUC: 0.7203
+Run time: 32.2s (training 1.1s, eval 31.1s, ok)
 ```
 
 The status at the end of the last line is `ok`, `crash`, `timeout-training` or `timeout-eval` (a timeout is preceded by e.g. `TIMEOUT: training killed after 60s`).
@@ -159,7 +159,7 @@ commit	Eval_AUC	status	description
 ```
 
 1. git commit hash (short, 7 chars)
-2. Eval AUC achieved (e.g. 0.7300) - use 0.0000 for crashes
+2. Eval AUC achieved (e.g. 0.7203) - use 0.0000 for crashes
 3. status: `keep`, `discard`, or `crash`
 4. short text description of what this experiment tried
 
@@ -167,14 +167,14 @@ Example:
 
 ```
 commit	Eval_AUC	status	description
-a1b2c3d	0.7326	keep	baseline
-b2c3d4e	0.7411	keep	increase number of trees
+a1b2c3d	0.7203	keep	baseline
+b2c3d4e	0.7291	keep	increase number of trees
 c3d4e5f	0.0000	crash	XGBoost OOM
 ```
 
 ## Research log
 
-Also maintain a research log `research-log.md` with details of your thinking, hypotheses, and observations for each experiment. This helps track your reasoning and decisions over time. Make is so that it can be related to `results.tsv` and the corresponding git commits.
+Also maintain a research log `research-log.md` with details of your thinking, hypotheses, and observations for each experiment. This helps track your reasoning and decisions over time. Make it so that it can be related to `results.tsv` and the corresponding git commits.
 
 
 ## The experiment loop
@@ -189,7 +189,7 @@ LOOP until the time budget is used up:
    - State a short **hypothesis**: what you are changing, why you think it will help, and (if applicable) which prior result motivates this step.
    - Classify the experiment as one of: *follow-up* to a promising result, *ablation/simplification* of a promising result, or *exploration* of a meaningfully different direction.
    - **Do not** run near-duplicate experiments unless you can state exactly what is different and why it matters. Avoid random-walk behavior and cosmetic variations of the same idea.
-   - If you haven't done web research in the last 10 experiments, or if your last 3+ experiments were discards, do research now before proposing your next change. See the **Research** section.
+   - If you haven't done web research in the last 10 experiments, or if you hit a plateau (3+ consecutive discards with <0.001 movement), do research now before proposing your next change. See the **Research** section.
 3. Tune `train.py` with that experimental idea by directly hacking the code.
 4. git commit
 5. Run the experiment: `python3 harness.py run > run.log 2>&1` (redirect everything - do NOT use tee or let output flood your context). Run one experiment at a time.
@@ -203,9 +203,9 @@ The idea is that you are a completely autonomous researcher trying things out. I
 
 **Timeout**: `harness.py run` enforces two limits. Training - everything in `train.py` before the `save_and_evaluate(model, prepare)` call (startup, loading data, `prepare(train)`, fitting) - is killed after **1 minute**. Evaluation - saving the artifact and scoring `eval.csv` row by row - is killed after **5 minutes**. Treat a timeout as a failure (log it as `crash`, discard and revert). Do not print `Training done, evaluating...` yourself: it is the harness's signal that training is over.
 
-**Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
+**Crashes**: If a run crashes (OOM, a bug, etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
-**Time budget**: You have 2 hours of wall-clock time from `python3 harness.py start`, counting everything: thinking, research, editing and runs. Within the budget, do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to keep working until the budget is used up. You are autonomous. If you run out of ideas, think harder - read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes.
+**Time budget**: You have 2 hours of wall-clock time from `python3 harness.py start`, counting everything: thinking, research, editing and runs. Within the budget, do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to keep working until the budget is used up. You are autonomous. If you run out of ideas, think harder - read papers and documentation, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes.
 
 When `python3 harness.py status` (or `python3 harness.py run`) prints `TIME IS UP`, do not start new experiments. Wrap up:
 

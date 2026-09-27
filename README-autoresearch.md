@@ -2,7 +2,7 @@
 
 an adaptation of A. Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) project to XGBoost
 
-The idea: give an AI agent a small but real XGBoost training setup and let it experiment autonomously for a fixed time budget (2 hours). It modifies the code, trains, checks if the result improved, keeps or discards, and repeats. When the time is up it stops, and you get a log of experiments and (hopefully) a better model. The training code here is a small, single-file XGBoost setup. The core idea is that you're not touching any of the Python files like you normally would as a researcher. Instead, you are programming the `program.md` markdown files that provide context to the AI agents and set up your autonomous research org. 
+The idea: give an AI agent a small but real XGBoost training setup and let it experiment autonomously for a fixed time budget (2 hours). It modifies the code, trains, checks if the result improved, keeps or discards, and repeats. When the time is up it stops, and you get a log of experiments and (hopefully) a better model. The training code here is a small, single-file XGBoost setup. The core idea is that you're not touching any of the Python files like you normally would as a researcher. Instead, you are programming the `program.md` markdown file that provides context to the AI agents and sets up your autonomous research org. 
 
 ## How it works
 

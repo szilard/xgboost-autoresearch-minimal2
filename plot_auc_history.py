@@ -17,7 +17,6 @@ plt.plot(df.loc[keep, "n"], df.loc[keep, "holdout_auc"], color="#d94040", linewi
 plt.plot(df.loc[keep, "n"], df.loc[keep, "holdout_auc"], marker="o", color="#d94040", linestyle="none", label="holdout", zorder=2)
 plt.xlabel("n")
 plt.ylabel("AUC")
-plt.ylim(ymin=0.70, ymax=0.95)
 plt.title("AUC vs n")
 plt.grid(True, color="lightgrey", linewidth=0.5)
 plt.legend()
