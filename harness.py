@@ -8,7 +8,8 @@ Artifacts live in the gitignored artifacts/ folder, named by full commit hash.
 It also keeps the experiment clock and times every run (gitignored timing/ folder):
 
     python3 harness.py start    # start the clock (at "go", after the setup)
-    python3 harness.py run      # run train.py: timed, killed after run_timeout_s,
+    python3 harness.py run      # run train.py: timed, killed if training exceeds
+                                # train_timeout_s or evaluation eval_timeout_s,
                                 # refused once the time budget is used up
     python3 harness.py status   # elapsed / remaining time
     python3 harness.py stop     # stop the clock (the agent's last action)
@@ -39,7 +40,9 @@ clock_file = timing_dir / "clock.json"
 runs_file = timing_dir / "runs.tsv"
 n_workers = os.cpu_count()
 time_budget_s = 2 * 3600
-run_timeout_s = 3 * 60
+train_timeout_s = 60     # train.py up to the save_and_evaluate() call
+eval_timeout_s = 5 * 60  # save_and_evaluate(): saving the artifact + row-by-row eval
+eval_marker = "Training done, evaluating..."
 
 
 def git(*args):
@@ -88,6 +91,8 @@ def save_and_evaluate(model, prepare):
     clock = read_clock()
     if "start" in clock and "stop" not in clock and os.environ.get("HARNESS_RUN") != "1":
         sys.exit("ERROR: the experiment clock is running, launch runs with `python3 harness.py run`")
+    # tells `harness.py run` that training is over: switch from the training to the eval time limit
+    print(eval_marker, flush=True)
 
     blob = cloudpickle.dumps({"model": model, "prepare": prepare})
     # score exactly what the ground truth evaluation will load, not the in-memory objects
@@ -165,35 +170,45 @@ def cmd_run():
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
         env={**os.environ, "HARNESS_RUN": "1"},
     )
-    timed_out = threading.Event()
+    timed_out = None  # phase ("training"/"eval") in which the run was killed
 
-    def kill():
-        timed_out.set()
-        os.killpg(proc.pid, signal.SIGKILL)
+    def kill(phase):
+        nonlocal timed_out
+        timed_out = phase
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
-    timer = threading.Timer(run_timeout_s, kill)
+    timer = threading.Timer(train_timeout_s, kill, ["training"])
     timer.start()
-    eval_s = 0.0
+    train_s = None
     for line in proc.stdout:
         print(line, end="", flush=True)
-        if line.startswith("Eval time:"):
-            eval_s = float(line.split()[2].rstrip("s"))
+        if train_s is None and line.rstrip("\n") == eval_marker:
+            train_s = time.time() - t0
+            timer.cancel()
+            timer = threading.Timer(eval_timeout_s, kill, ["eval"])
+            timer.start()
     proc.wait()
     timer.cancel()
     run_s = time.time() - t0
+    if train_s is None:
+        train_s = run_s
 
-    status = "timeout" if timed_out.is_set() else "ok" if proc.returncode == 0 else "crash"
+    status = f"timeout-{timed_out}" if timed_out else "ok" if proc.returncode == 0 else "crash"
     new_file = not runs_file.exists()
     with open(runs_file, "a", newline="") as f:
         w = csv.writer(f, delimiter="\t")
         if new_file:
-            w.writerow(["commit", "start", "end", "run_s", "eval_s", "status"])
+            w.writerow(["commit", "start", "end", "train_s", "eval_s", "status"])
         w.writerow([git("rev-parse", "--short=7", "HEAD"), f"{t0:.1f}", f"{t0 + run_s:.1f}",
-                    f"{run_s:.1f}", f"{eval_s:.1f}", status])
-    if status == "timeout":
-        print(f"TIMEOUT: killed after {run_timeout_s}s")
-    print(f"Run time: {run_s:.1f}s ({status})")
-    sys.exit(proc.returncode or (124 if status == "timeout" else 0))
+                    f"{train_s:.1f}", f"{run_s - train_s:.1f}", status])
+    if timed_out:
+        limit = train_timeout_s if timed_out == "training" else eval_timeout_s
+        print(f"TIMEOUT: {timed_out} killed after {limit}s")
+    print(f"Run time: {run_s:.1f}s (training {train_s:.1f}s, eval {run_s - train_s:.1f}s, {status})")
+    sys.exit(proc.returncode or (124 if timed_out else 0))
 
 
 def cmd_report():
@@ -218,9 +233,11 @@ def cmd_report():
     runs_wall += (cur_end - cur_start) if cur_end is not None else 0.0
 
     total = end - start
-    run_s = sum(float(r["run_s"]) for r in runs)
+    train_s = sum(float(r["train_s"]) for r in runs)
     eval_s = sum(float(r["eval_s"]) for r in runs)
-    counts = {k: sum(r["status"] == k for r in runs) for k in ("ok", "crash", "timeout")}
+    run_s = train_s + eval_s
+    counts = {k: sum(r["status"] == k for r in runs)
+              for k in ("ok", "crash", "timeout-training", "timeout-eval")}
 
     pct = lambda x: f"{100 * x / total:5.1f}%" if total else ""
     print(f"Clock:        {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start))} -> "
@@ -228,10 +245,11 @@ def cmd_report():
           f"{'' if 'stop' in clock else ' (still running)'}")
     print(f"Total:        {fmt(total)}")
     print(f"XGBoost runs: {fmt(runs_wall)} {pct(runs_wall)}   "
-          f"({len(runs)} runs: {counts['ok']} ok, {counts['crash']} crash, {counts['timeout']} timeout)")
-    print(f"  training:   {fmt(run_s - eval_s)} {pct(run_s - eval_s)}   "
-          f"(train.py up to evaluation: startup, data, features, fit, save)")
-    print(f"  evaluation: {fmt(eval_s)} {pct(eval_s)}   (row-by-row scoring of eval.csv)")
+          f"({len(runs)} runs: {counts['ok']} ok, {counts['crash']} crash, "
+          f"{counts['timeout-training']} training timeout, {counts['timeout-eval']} eval timeout)")
+    print(f"  training:   {fmt(train_s)} {pct(train_s)}   "
+          f"(train.py up to evaluation: startup, data, features, fit)")
+    print(f"  evaluation: {fmt(eval_s)} {pct(eval_s)}   (saving the artifact + row-by-row scoring of eval.csv)")
     print(f"AI:           {fmt(total - runs_wall)} {pct(total - runs_wall)}   "
           f"(everything else: token generation, tool calls, web research, API latency)")
     if run_s > runs_wall + 1:

@@ -20,7 +20,7 @@ Once you get confirmation, start the experiment clock with `python3 harness.py s
 
 ## Experimentation
 
-You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times it, kills it if it exceeds the per-run timeout, and refuses to start once the time budget is used up. Do not run `python3 train.py` directly while the clock is running (it will refuse).
+You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times it, kills it if it exceeds the time limits (1 minute for training, 5 minutes for evaluation, see **Timeout**), and refuses to start once the time budget is used up. Do not run `python3 train.py` directly while the clock is running (it will refuse).
 
 **What you CAN do:**
 - Modify `train.py` - this is the only file you edit. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. You can also implement new features such as early stopping etc.
@@ -60,7 +60,7 @@ You are expected to actively search the web and read external resources througho
 - Don't blindly copy — adapt what you read to this specific dataset and problem
 - If a source suggests a technique, understand *why* it works before implementing it
 
-**Important:** Research time does not count against the per-run timeout (it does count against the 2-hour time budget). Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
+**Important:** Research time does not count against the per-run time limits (it does count against the 2-hour time budget). Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
 
 **The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such early stopping. Be creative! The only constraint is that the code runs without crashing and finishes in reasonable time.
 
@@ -92,7 +92,7 @@ model.fit(X_train, y_train)
 save_and_evaluate(model, prepare)
 ```
 
-**`prepare(df)` must compute each row's features from that row alone, plus lookups fitted on `train`.** `prepare(df)` is called here on the whole training set, but in evaluation (both `eval.csv` and the ground truth) it is called on **one row at a time**, and the prepared rows are then scored together in one batch. Any feature that aggregates over `df` itself therefore means something completely different in the two cases (in evaluation `df` is a single row) and will hurt your Eval AUC. Also keep `prepare` fast per call: it runs once per evaluation row, and that time counts towards the run's timeout.
+**`prepare(df)` must compute each row's features from that row alone, plus lookups fitted on `train`.** `prepare(df)` is called here on the whole training set, but in evaluation (both `eval.csv` and the ground truth) it is called on **one row at a time**, and the prepared rows are then scored together in one batch. Any feature that aggregates over `df` itself therefore means something completely different in the two cases (in evaluation `df` is a single row) and will hurt your Eval AUC. Also keep `prepare` fast per call: it runs once per evaluation row, so a slow `prepare` can hit the 5-minute evaluation limit (the starter takes ~30s for the whole of `eval.csv`).
 
 Concretely, inside `prepare(df)` do NOT:
 
@@ -130,13 +130,14 @@ Once the run finishes it prints a summary like this:
 
 ```
 Training time: 0.2s
+Training done, evaluating...
 Artifact: artifacts/cb4bfa5ac7cc84eee42470888843d097422ce13a.pkl (0.8 MB)
 Eval time: 30.1s
 Eval AUC: 0.7526
-Run time: 31.5s (ok)
+Run time: 31.4s (training 1.1s, eval 30.3s, ok)
 ```
 
-The status in the last line is `ok`, `crash`, or `timeout` (then preceded by `TIMEOUT: killed after 180s`).
+The status at the end of the last line is `ok`, `crash`, `timeout-training` or `timeout-eval` (a timeout is preceded by e.g. `TIMEOUT: training killed after 60s`).
 
 If it prints `WARNING: train.py has uncommitted changes, artifact not saved`, you ran it before committing; commit and run again, otherwise the experiment cannot be checked against the ground truth.
 
@@ -200,7 +201,7 @@ LOOP until the time budget is used up:
 11. **Every 10 experiments**, pause and briefly synthesize what you have learned so far: what kinds of changes help, what kinds do not, what your current best theory is about what matters on this dataset, and what direction to try next. Write this synthesis as a short note in your context (not a file) to inform subsequent experiments.
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
-**Timeout**: Model training should take <1 minute. The row-by-row evaluation adds ~30s on top (more if `prepare` is slow per call). `harness.py run` kills a run after 3 minutes; treat a timeout as a failure (log it as `crash`, discard and revert).
+**Timeout**: `harness.py run` enforces two limits. Training - everything in `train.py` before the `save_and_evaluate(model, prepare)` call (startup, loading data, `prepare(train)`, fitting) - is killed after **1 minute**. Evaluation - saving the artifact and scoring `eval.csv` row by row - is killed after **5 minutes**. Treat a timeout as a failure (log it as `crash`, discard and revert). Do not print `Training done, evaluating...` yourself: it is the harness's signal that training is over.
 
 **Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
