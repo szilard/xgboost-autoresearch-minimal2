@@ -1,24 +1,43 @@
-import urllib.request
 from pathlib import Path
 
-base_url = "https://xgboost-autoresearch--airline-dataset.s3.us-west-2.amazonaws.com"
+import polars as pl
 
-files = [
-    "2005-slice1-100k.csv",
-    "2005-slice2-1m.csv",
-    "2006-slice2-1m.csv",
+data_dir = Path(__file__).parent / "data"
+
+keep_cols = ["Month", "DayofMonth", "DayOfWeek", "DepTime", "UniqueCarrier",
+             "Origin", "Dest", "Distance", "dep_delayed_15min"]
+
+df = pl.read_csv(data_dir / "2005.csv", null_values="NA")
+
+df = df.with_columns(
+    pl.when(pl.col("DepDelay").cast(pl.Int32, strict=False) >= 15).then(pl.lit("Y")).otherwise(pl.lit("N"))
+      .alias("dep_delayed_15min"),
+    *[("c-" + pl.col(col).cast(pl.Utf8)).alias(col)
+      for col in ["Month", "DayofMonth", "DayOfWeek"]],
+)
+
+df = df.select(keep_cols).drop_nulls()
+
+print(df.shape)
+print(df.head())
+print(df["dep_delayed_15min"].value_counts().sort("dep_delayed_15min"))
+
+
+def split_4_1_1(d):
+    n_train = d.height * 4 // 6
+    n_eval = d.height // 6
+    return d.slice(0, n_train), d.slice(n_train, n_eval), d.slice(n_train + n_eval)
+
+
+df_neg = df.filter(pl.col("dep_delayed_15min") == "N").sample(n=150_000, shuffle=True, seed=123)
+df_pos = df.filter(pl.col("dep_delayed_15min") == "Y").sample(n=150_000, shuffle=True, seed=123)
+
+df_train, df_eval, df_holdout = [
+    pl.concat([neg, pos]).sample(fraction=1.0, shuffle=True, seed=123)
+    for neg, pos in zip(split_4_1_1(df_neg), split_4_1_1(df_pos))
 ]
 
-data_dir = Path(__file__).parent / "data-cache"
-data_dir.mkdir(exist_ok=True)
-
-for name in files:
-    dest = data_dir / name
-    if dest.exists():
-        print(f"{name}: already downloaded ({dest.stat().st_size:,} bytes)")
-        continue
-    print(f"Downloading {name}...")
-    tmp = dest.with_suffix(dest.suffix + ".part")
-    urllib.request.urlretrieve(f"{base_url}/{name}", tmp)
-    tmp.rename(dest)
-    print(f"  done ({dest.stat().st_size:,} bytes)")
+for name, d in [("train", df_train), ("eval", df_eval), ("holdout", df_holdout)]:
+    print(f"\n{name}: {d.shape}")
+    print(d["dep_delayed_15min"].value_counts().sort("dep_delayed_15min"))
+    d.write_csv(data_dir / f"{name}.csv")

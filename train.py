@@ -2,11 +2,11 @@ import pandas as pd
 import time
 import xgboost as xgb
 from pathlib import Path
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+from harness import save_and_evaluate
 
 
-data_dir = Path(__file__).parent / "data-cache"
-train = pd.read_csv(f"{data_dir}/2005-slice1-100k.csv")
+data_dir = Path(__file__).parent / "data"
+train = pd.read_csv(f"{data_dir}/train.csv")
 
 cat_cols = ["Month", "DayofMonth", "DayOfWeek", "UniqueCarrier", "Origin", "Dest"]
 num_cols = ["DepTime", "Distance"]
@@ -38,26 +38,10 @@ model = xgb.XGBClassifier(
 )
 
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-t0 = time.time()
-scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="roc_auc", n_jobs=1)
-print(f"CV time: {time.time() - t0:.1f}s")
-print(f"CV AUC: {scores.mean():.4f} ± {scores.std():.4f}")
-
 t0 = time.time()
 model.fit(X_train, y_train)
-print(f"Final model training time: {time.time() - t0:.1f}s")
+print(f"Training time: {time.time() - t0:.1f}s")
 
 
-# 4/5 model: train on the first fold's training split (same as one CV fold)
-train_idx_4_5 = list(cv.split(X_train, y_train))[0][0]
-X_4_5 = X_train.iloc[train_idx_4_5]
-y_4_5 = y_train[train_idx_4_5]
-
-from sklearn.base import clone
-
-model_4_5 = clone(model)
-t0 = time.time()
-model_4_5.fit(X_4_5, y_4_5)
-print(f"4/5 model training time: {time.time() - t0:.1f}s")
+# Saves {model, prepare} to artifacts/ and scores eval.csv row by row. Keep this call last.
+save_and_evaluate(model, prepare)

@@ -1,6 +1,9 @@
-data-cache/
-.autogluon-model
+data/
+artifacts/
 run.log
+results.tsv
+groundtruth_all.tsv
+auc_history.png
 
 
 # Python

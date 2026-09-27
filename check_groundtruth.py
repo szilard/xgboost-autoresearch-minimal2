@@ -1,26 +1,15 @@
-exec(open(__file__.replace("check_groundtruth.py", "train.py")).read())
-print()
+# Ground truth: score a saved artifact on holdout.csv, row by row. Human only.
+# Usage: python3 check_groundtruth.py [commit]   (default: HEAD)
+import sys
+import time
+import pandas as pd
+from harness import data_dir, git, load_artifact, score_by_row
 
-from sklearn.metrics import roc_auc_score
-import numpy as np
+commit = sys.argv[1] if len(sys.argv) > 1 else git("rev-parse", "HEAD")
+artifact = load_artifact(commit)
 
-# In some commits the fitted model is `final_model`; in others it's `model`.
-if "final_model" in dir():
-    model = final_model
-
-combos = [
-    ("full model - eval 2005 slice 2", model,     "2005-slice2-1m.csv"),
-    ("4/5 model - eval 2005 slice 2",  model_4_5, "2005-slice2-1m.csv"),
-    ("full model - eval 2006",         model,     "2006-slice2-1m.csv"),
-]
-
-for label, m, csv in combos:
-    test = pd.read_csv(f"{data_dir}/{csv}")
-    X_test, y_test = prepare(test)
-
-    t0 = time.time()
-    y_prob = m.predict_proba(X_test)[:, 1]
-    test_auc = roc_auc_score(y_test, y_prob)
-    print(f"Test time ({label}): {time.time() - t0:.1f}s")
-    print(f"Test AUC ({label}): {test_auc:.4f}")
-
+holdout = pd.read_csv(data_dir / "holdout.csv")
+t0 = time.time()
+holdout_auc = score_by_row(artifact, holdout)
+print(f"Holdout time: {time.time() - t0:.1f}s")
+print(f"Holdout AUC: {holdout_auc:.4f}")
