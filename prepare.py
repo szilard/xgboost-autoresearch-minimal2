@@ -3,11 +3,13 @@ from pathlib import Path
 import pandas as pd
 
 data_dir = Path(__file__).parent / "data"
+# source data, read straight from S3 (not stored locally)
+source_url = "https://xgboost-autoresearch--airline-dataset.s3.us-west-2.amazonaws.com/2005.csv"
 
 keep_cols = ["Month", "DayofMonth", "DayOfWeek", "CRSDepTime", "UniqueCarrier",
              "Origin", "Dest", "Distance", "dep_delayed_15min"]
 
-df = pd.read_csv(data_dir / "2005.csv", na_values="NA",
+df = pd.read_csv(source_url, na_values="NA",
                  usecols=[c for c in keep_cols if c != "dep_delayed_15min"] + ["DepTime", "DepDelay"])
 
 # keep only flights that departed (DepTime missing = cancelled); the actual DepTime itself is
