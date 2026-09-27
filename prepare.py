@@ -1,43 +1,42 @@
 from pathlib import Path
 
-import polars as pl
+import pandas as pd
 
 data_dir = Path(__file__).parent / "data"
 
 keep_cols = ["Month", "DayofMonth", "DayOfWeek", "DepTime", "UniqueCarrier",
              "Origin", "Dest", "Distance", "dep_delayed_15min"]
 
-df = pl.read_csv(data_dir / "2005.csv", null_values="NA")
+df = pd.read_csv(data_dir / "2005.csv", na_values="NA",
+                 usecols=[c for c in keep_cols if c != "dep_delayed_15min"] + ["DepDelay"])
 
-df = df.with_columns(
-    pl.when(pl.col("DepDelay").cast(pl.Int32, strict=False) >= 15).then(pl.lit("Y")).otherwise(pl.lit("N"))
-      .alias("dep_delayed_15min"),
-    *[("c-" + pl.col(col).cast(pl.Utf8)).alias(col)
-      for col in ["Month", "DayofMonth", "DayOfWeek"]],
-)
+df["dep_delayed_15min"] = (pd.to_numeric(df["DepDelay"], errors="coerce") >= 15).map({True: "Y", False: "N"})
+for col in ["Month", "DayofMonth", "DayOfWeek"]:
+    df[col] = "c-" + df[col].astype("Int64").astype("string")
 
-df = df.select(keep_cols).drop_nulls()
+df = df[keep_cols].dropna().reset_index(drop=True)
+df = df.astype({"DepTime": "int64", "Distance": "int64"})
 
 print(df.shape)
 print(df.head())
-print(df["dep_delayed_15min"].value_counts().sort("dep_delayed_15min"))
+print(df["dep_delayed_15min"].value_counts().sort_index())
 
 
 def split_4_1_1(d):
-    n_train = d.height * 4 // 6
-    n_eval = d.height // 6
-    return d.slice(0, n_train), d.slice(n_train, n_eval), d.slice(n_train + n_eval)
+    n_train = len(d) * 4 // 6
+    n_eval = len(d) // 6
+    return d.iloc[:n_train], d.iloc[n_train:n_train + n_eval], d.iloc[n_train + n_eval:]
 
 
-df_neg = df.filter(pl.col("dep_delayed_15min") == "N").sample(n=150_000, shuffle=True, seed=123)
-df_pos = df.filter(pl.col("dep_delayed_15min") == "Y").sample(n=150_000, shuffle=True, seed=123)
+df_neg = df[df["dep_delayed_15min"] == "N"].sample(n=150_000, random_state=123)
+df_pos = df[df["dep_delayed_15min"] == "Y"].sample(n=150_000, random_state=123)
 
 df_train, df_eval, df_holdout = [
-    pl.concat([neg, pos]).sample(fraction=1.0, shuffle=True, seed=123)
+    pd.concat([neg, pos]).sample(frac=1.0, random_state=123)
     for neg, pos in zip(split_4_1_1(df_neg), split_4_1_1(df_pos))
 ]
 
 for name, d in [("train", df_train), ("eval", df_eval), ("holdout", df_holdout)]:
     print(f"\n{name}: {d.shape}")
-    print(d["dep_delayed_15min"].value_counts().sort("dep_delayed_15min"))
-    d.write_csv(data_dir / f"{name}.csv")
+    print(d["dep_delayed_15min"].value_counts().sort_index())
+    d.to_csv(data_dir / f"{name}.csv", index=False)

@@ -20,7 +20,7 @@ The repo is deliberately kept small:
 ```bash
 
 # 1. Install dependencies
-pip install pandas polars xgboost scikit-learn cloudpickle matplotlib --break-system-packages
+pip install pandas xgboost scikit-learn cloudpickle matplotlib --break-system-packages
 
 # 2. Build train/eval/holdout.csv from data/2005.csv
 python3 prepare.py
@@ -71,4 +71,4 @@ timing/                - experiment clock and per-run timings (gitignored)
 ## Design choices
 
 - **Single file to modify.** The agent only touches `train.py`. This keeps the scope manageable and diffs reviewable.
-- **Self-contained.** No external dependencies beyond XGBoost, pandas, scikit-learn, cloudpickle, polars (data prep) and matplotlib (plot). No distributed training, no complex configs. 
+- **Self-contained.** No external dependencies beyond XGBoost, pandas (training and data prep), scikit-learn, cloudpickle and matplotlib (plot). No distributed training, no complex configs. 
