@@ -75,7 +75,7 @@ You are expected to actively search the web and read external resources througho
 train = pd.read_csv(f"{data_dir}/train.csv")
 
 cat_cols = ["Month", "DayofMonth", "DayOfWeek", "UniqueCarrier", "Origin", "Dest"]
-num_cols = ["DepTime", "Distance"]
+num_cols = ["CRSDepTime", "Distance"]
 target   = "dep_delayed_15min"
 
 
@@ -106,12 +106,12 @@ Group statistics and lookup tables are useful and entirely allowed — just **fi
 ```
 # fitted once, on train
 route = train["Origin"] + "-" + train["Dest"]
-route_median_deptime = train["DepTime"].groupby(route).median()
+route_median_deptime = train["CRSDepTime"].groupby(route).median()
 
 def prepare(df):
     ...
     # looked up per row: the same number in training and in evaluation
-    X["DepTimeVsRouteMedian"] = df["DepTime"] - (
+    X["CRSDepTimeVsRouteMedian"] = df["CRSDepTime"] - (
         df["Origin"] + "-" + df["Dest"]
     ).map(route_median_deptime)
 ```

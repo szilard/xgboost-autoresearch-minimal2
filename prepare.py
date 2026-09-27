@@ -4,18 +4,22 @@ import pandas as pd
 
 data_dir = Path(__file__).parent / "data"
 
-keep_cols = ["Month", "DayofMonth", "DayOfWeek", "DepTime", "UniqueCarrier",
+keep_cols = ["Month", "DayofMonth", "DayOfWeek", "CRSDepTime", "UniqueCarrier",
              "Origin", "Dest", "Distance", "dep_delayed_15min"]
 
 df = pd.read_csv(data_dir / "2005.csv", na_values="NA",
-                 usecols=[c for c in keep_cols if c != "dep_delayed_15min"] + ["DepDelay"])
+                 usecols=[c for c in keep_cols if c != "dep_delayed_15min"] + ["DepTime", "DepDelay"])
+
+# keep only flights that departed (DepTime missing = cancelled); the actual DepTime itself is
+# not kept, DepTime minus the scheduled CRSDepTime is DepDelay, which would leak the target
+df = df[df["DepTime"].notna()]
 
 df["dep_delayed_15min"] = (pd.to_numeric(df["DepDelay"], errors="coerce") >= 15).map({True: "Y", False: "N"})
 for col in ["Month", "DayofMonth", "DayOfWeek"]:
     df[col] = "c-" + df[col].astype("Int64").astype("string")
 
 df = df[keep_cols].dropna().reset_index(drop=True)
-df = df.astype({"DepTime": "int64", "Distance": "int64"})
+df = df.astype({"CRSDepTime": "int64", "Distance": "int64"})
 
 print(df.shape)
 print(df.head())

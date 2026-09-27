@@ -9,7 +9,7 @@ data_dir = Path(__file__).parent / "data"
 train = pd.read_csv(f"{data_dir}/train.csv")
 
 cat_cols = ["Month", "DayofMonth", "DayOfWeek", "UniqueCarrier", "Origin", "Dest"]
-num_cols = ["DepTime", "Distance"]
+num_cols = ["CRSDepTime", "Distance"]
 target   = "dep_delayed_15min"
 
 
