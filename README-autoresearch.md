@@ -2,7 +2,7 @@
 
 an adaptation of A. Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) project to XGBoost
 
-The idea: give an AI agent a small but real XGBoost training setup and let it experiment autonomously overnight. It modifies the code, trains, checks if the result improved, keeps or discards, and repeats. You wake up in the morning to a log of experiments and (hopefully) a better model. The training code here is a small, single-file XGBoost setup. The core idea is that you're not touching any of the Python files like you normally would as a researcher. Instead, you are programming the `program.md` markdown files that provide context to the AI agents and set up your autonomous research org. 
+The idea: give an AI agent a small but real XGBoost training setup and let it experiment autonomously for a fixed time budget (2 hours). It modifies the code, trains, checks if the result improved, keeps or discards, and repeats. When the time is up it stops, and you get a log of experiments and (hopefully) a better model. The training code here is a small, single-file XGBoost setup. The core idea is that you're not touching any of the Python files like you normally would as a researcher. Instead, you are programming the `program.md` markdown files that provide context to the AI agents and set up your autonomous research org. 
 
 ## How it works
 
@@ -11,7 +11,7 @@ The repo is deliberately kept small:
 - **`prepare.py`** - builds train/eval/holdout.csv from data/2005.csv. Human only; the AI agent must not read it.
 - **`train.py`** - the single file the agent edits. Contains the XGBoost model training. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. **This file is edited and iterated on by the agent**.
 - **`program.md`** - baseline instructions for one agent. Point your agent here and let it go. **This file is edited and iterated on by the human**.
-- **`harness.py`** - saves the trained model and `prepare` to `artifacts/<commit>.pkl` (gitignored) and scores `eval.csv` row by row. Not modified by the AI agent.
+- **`harness.py`** - runs and times the experiments (`python3 harness.py run`), keeps the 2-hour experiment clock (`start`/`status`/`stop`), saves the trained model and `prepare` to `artifacts/<commit>.pkl` (gitignored) and scores `eval.csv` row by row. Not modified by the AI agent.
 - **`check_groundtruth.py`** - script to check the "ground truth" AUC on `holdout.csv` by the human, from the saved artifact (no retraining): `python3 check_groundtruth.py [commit]`. AI should not access this file.
 - **`run_groundtruth_all.sh`** + **`plot_auc_history.py`** - after a run, score every kept experiment in `results.tsv` on the holdout set (`groundtruth_all.tsv`) and plot eval vs holdout AUC (`auc_history.png`). Human only.
 
@@ -41,18 +41,31 @@ Hi have a look at program.md and let's kick off a new experiment! let's do the s
 
 The `program.md` file is essentially a super lightweight "skill".
 
+After the setup the agent starts the clock (`python3 harness.py start`), runs experiments for 2 hours, then wraps up and stops the clock (`python3 harness.py stop`). If an agent forgets to stop, the report counts up to the moment you run it, so run `python3 harness.py stop` yourself first.
+
+## After the run
+
+```bash
+python3 harness.py report   # total time, split into XGBoost training / evaluation vs the AI
+./run_groundtruth_all.sh    # holdout AUC of every kept experiment -> groundtruth_all.tsv
+python3 plot_auc_history.py # eval vs holdout AUC -> auc_history.png
+```
+
+The timing works the same for any agent (Claude Code, Codex, ...): `harness.py` logs the wall-clock time of every run to `timing/runs.tsv`, and everything else between `start` and `stop` is the AI's time (token generation, tool calls, web research, API latency).
+
 ## Project structure
 
 ```
 prepare.py             - builds the data splits (human only)
 train.py               - XGBoost training (AI agent modifies this)
-harness.py             - saves the artifact, row-by-row eval scoring
+harness.py             - experiment clock, timed runs, saves the artifact, row-by-row eval scoring
 check_groundtruth.py   - holdout scoring of a saved artifact (human only)
 run_groundtruth_all.sh - holdout scoring of all kept experiments (human only)
 plot_auc_history.py    - plot of eval vs holdout AUC (human only)
 program.md             - agent instructions
 data/                  - 2005.csv source and train/eval/holdout.csv splits (gitignored)
 artifacts/             - saved model + prepare per commit (gitignored)
+timing/                - experiment clock and per-run timings (gitignored)
 ```
 
 ## Design choices

@@ -4,10 +4,24 @@ The artifact is `{"model": model, "prepare": prepare}` pickled with cloudpickle,
 which stores `prepare` by value together with every module-level lookup it uses
 (cat_levels etc.), so it can be scored later without train.py or the training data.
 Artifacts live in the gitignored artifacts/ folder, named by full commit hash.
+
+It also keeps the experiment clock and times every run (gitignored timing/ folder):
+
+    python3 harness.py start    # start the clock (at "go", after the setup)
+    python3 harness.py run      # run train.py: timed, killed after run_timeout_s,
+                                # refused once the time budget is used up
+    python3 harness.py status   # elapsed / remaining time
+    python3 harness.py stop     # stop the clock (the agent's last action)
+    python3 harness.py report   # total time, split into XGBoost runs vs the AI
 """
+import csv
+import json
 import os
 import pickle
+import signal
 import subprocess
+import sys
+import threading
 import time
 import multiprocessing as mp
 from pathlib import Path
@@ -20,7 +34,12 @@ from sklearn.metrics import roc_auc_score
 repo_dir = Path(__file__).parent
 data_dir = repo_dir / "data"
 artifacts_dir = repo_dir / "artifacts"
+timing_dir = repo_dir / "timing"
+clock_file = timing_dir / "clock.json"
+runs_file = timing_dir / "runs.tsv"
 n_workers = os.cpu_count()
+time_budget_s = 2 * 3600
+run_timeout_s = 3 * 60
 
 
 def git(*args):
@@ -66,6 +85,10 @@ def score_by_row(artifact, df):
 
 def save_and_evaluate(model, prepare):
     """Save the artifact for the current commit, then score eval.csv with the reloaded copy."""
+    clock = read_clock()
+    if "start" in clock and "stop" not in clock and os.environ.get("HARNESS_RUN") != "1":
+        sys.exit("ERROR: the experiment clock is running, launch runs with `python3 harness.py run`")
+
     blob = cloudpickle.dumps({"model": model, "prepare": prepare})
     # score exactly what the ground truth evaluation will load, not the in-memory objects
     artifact = pickle.loads(blob)
@@ -83,3 +106,141 @@ def save_and_evaluate(model, prepare):
     eval_auc = score_by_row(artifact, eval_df)
     print(f"Eval time: {time.time() - t0:.1f}s")
     print(f"Eval AUC: {eval_auc:.4f}")
+
+
+def fmt(seconds):
+    seconds = int(round(seconds))
+    return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m{seconds % 60:02d}s"
+
+
+def read_clock():
+    return json.loads(clock_file.read_text()) if clock_file.exists() else {}
+
+
+def elapsed(clock):
+    return clock.get("stop", time.time()) - clock["start"]
+
+
+def cmd_start():
+    timing_dir.mkdir(exist_ok=True)
+    clock_file.write_text(json.dumps({"start": time.time()}))
+    print(f"Clock started, time budget {fmt(time_budget_s)}")
+
+
+def cmd_status():
+    clock = read_clock()
+    if "start" not in clock:
+        print("Clock not started")
+        return
+    left = time_budget_s - elapsed(clock)
+    print(f"Elapsed: {fmt(elapsed(clock))}, remaining: {fmt(max(left, 0))}")
+    if "stop" in clock:
+        print("Clock stopped")
+    elif left <= 0:
+        print("TIME IS UP: do not start new experiments; wrap up and run `python3 harness.py stop`")
+
+
+def cmd_stop():
+    clock = read_clock()
+    if "start" not in clock:
+        sys.exit("Clock not started")
+    clock.setdefault("stop", time.time())
+    clock_file.write_text(json.dumps(clock))
+    print(f"Clock stopped after {fmt(elapsed(clock))}")
+
+
+def cmd_run():
+    """Run train.py as a timed subprocess, streaming its output, and log the timing."""
+    clock = read_clock()
+    if "start" not in clock:
+        sys.exit("ERROR: clock not started, run `python3 harness.py start` first")
+    if "stop" in clock or elapsed(clock) >= time_budget_s:
+        print("TIME IS UP: do not start new experiments; wrap up and run `python3 harness.py stop`")
+        sys.exit(3)
+
+    t0 = time.time()
+    # own process group, so a timeout also kills the row-scoring worker processes
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "train.py"], cwd=repo_dir, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
+        env={**os.environ, "HARNESS_RUN": "1"},
+    )
+    timed_out = threading.Event()
+
+    def kill():
+        timed_out.set()
+        os.killpg(proc.pid, signal.SIGKILL)
+
+    timer = threading.Timer(run_timeout_s, kill)
+    timer.start()
+    eval_s = 0.0
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        if line.startswith("Eval time:"):
+            eval_s = float(line.split()[2].rstrip("s"))
+    proc.wait()
+    timer.cancel()
+    run_s = time.time() - t0
+
+    status = "timeout" if timed_out.is_set() else "ok" if proc.returncode == 0 else "crash"
+    new_file = not runs_file.exists()
+    with open(runs_file, "a", newline="") as f:
+        w = csv.writer(f, delimiter="\t")
+        if new_file:
+            w.writerow(["commit", "start", "end", "run_s", "eval_s", "status"])
+        w.writerow([git("rev-parse", "--short=7", "HEAD"), f"{t0:.1f}", f"{t0 + run_s:.1f}",
+                    f"{run_s:.1f}", f"{eval_s:.1f}", status])
+    if status == "timeout":
+        print(f"TIMEOUT: killed after {run_timeout_s}s")
+    print(f"Run time: {run_s:.1f}s ({status})")
+    sys.exit(proc.returncode or (124 if status == "timeout" else 0))
+
+
+def cmd_report():
+    """Total time since the clock started, split into train.py runs and the rest (the AI)."""
+    clock = read_clock()
+    if "start" not in clock:
+        sys.exit("Clock not started")
+    start = clock["start"]
+    end = clock.get("stop", time.time())
+    with open(runs_file) if runs_file.exists() else open(os.devnull) as f:
+        runs = [r for r in csv.DictReader(f, delimiter="\t") if float(r["start"]) >= start]
+
+    # union of the run intervals, in case the agent ran experiments in parallel
+    runs_wall = 0.0
+    cur_start = cur_end = None
+    for s, e in sorted((float(r["start"]), min(float(r["end"]), end)) for r in runs):
+        if cur_end is None or s > cur_end:
+            runs_wall += (cur_end - cur_start) if cur_end is not None else 0.0
+            cur_start, cur_end = s, e
+        else:
+            cur_end = max(cur_end, e)
+    runs_wall += (cur_end - cur_start) if cur_end is not None else 0.0
+
+    total = end - start
+    run_s = sum(float(r["run_s"]) for r in runs)
+    eval_s = sum(float(r["eval_s"]) for r in runs)
+    counts = {k: sum(r["status"] == k for r in runs) for k in ("ok", "crash", "timeout")}
+
+    pct = lambda x: f"{100 * x / total:5.1f}%" if total else ""
+    print(f"Clock:        {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start))} -> "
+          f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end))}"
+          f"{'' if 'stop' in clock else ' (still running)'}")
+    print(f"Total:        {fmt(total)}")
+    print(f"XGBoost runs: {fmt(runs_wall)} {pct(runs_wall)}   "
+          f"({len(runs)} runs: {counts['ok']} ok, {counts['crash']} crash, {counts['timeout']} timeout)")
+    print(f"  training:   {fmt(run_s - eval_s)} {pct(run_s - eval_s)}   "
+          f"(train.py up to evaluation: startup, data, features, fit, save)")
+    print(f"  evaluation: {fmt(eval_s)} {pct(eval_s)}   (row-by-row scoring of eval.csv)")
+    print(f"AI:           {fmt(total - runs_wall)} {pct(total - runs_wall)}   "
+          f"(everything else: token generation, tool calls, web research, API latency)")
+    if run_s > runs_wall + 1:
+        print(f"Note: runs overlapped; summed run time is {fmt(run_s)}")
+
+
+if __name__ == "__main__":
+    commands = {"start": cmd_start, "status": cmd_status, "stop": cmd_stop,
+                "run": cmd_run, "report": cmd_report}
+    if len(sys.argv) != 2 or sys.argv[1] not in commands:
+        sys.exit(f"usage: python3 harness.py {{{','.join(commands)}}}")
+    commands[sys.argv[1]]()

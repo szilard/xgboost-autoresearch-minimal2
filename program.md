@@ -11,16 +11,16 @@ To set up a new experiment, work with the user to:
 3. **Read the in-scope files**: The repo is small. Read these files for full context:
    - `README-autoresearch.md` - repository context.
    - `train.py` - the file you modify. Data preparation, feature engineering, choosing hyperparameters and model training (with possible early stopping etc.).
-   - `harness.py` - saves the trained model and `prepare` to `artifacts/` and scores `eval.csv` row by row. Do not modify.
+   - `harness.py` - runs and times the experiments, keeps the 2-hour experiment clock, saves the trained model and `prepare` to `artifacts/` and scores `eval.csv` row by row. Do not modify.
 4. **Verify data exists**: Check that `data/` contains `train.csv` and `eval.csv`. If not, tell the human.
 5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
 6. **Confirm and go**: Confirm setup looks good.
 
-Once you get confirmation, kick off the experimentation.
+Once you get confirmation, start the experiment clock with `python3 harness.py start` as your very first action, then kick off the experimentation. From then on you have a **time budget of 2 hours** of wall-clock time, see **Time budget** below.
 
 ## Experimentation
 
-You launch it simply as: `python3 train.py`.
+You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times it, kills it if it exceeds the per-run timeout, and refuses to start once the time budget is used up. Do not run `python3 train.py` directly while the clock is running (it will refuse).
 
 **What you CAN do:**
 - Modify `train.py` - this is the only file you edit. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. You can also implement new features such as early stopping etc.
@@ -30,7 +30,7 @@ You launch it simply as: `python3 train.py`.
 - Do not read, run, or modify `prepare.py`. It is a human-only tool that builds the data splits, including the held-out test set.
 - Do not install new packages or add dependencies. You can only use what's already installed.
 - Do not change the evaluation. The final model is trained on `train.csv` and evaluated by the call `save_and_evaluate(model, prepare)` at the end of `train.py`, which must stay the last line. Do not add cross-validation, a retrain on more data, or any other evaluation of your own as the metric.
-- Do not modify the evaluation harness. Do not modify `harness.py`, and do not modify or delete anything in `artifacts/`.
+- Do not modify the evaluation harness. Do not modify `harness.py`, and do not modify or delete anything in `artifacts/` or `timing/`.
 - Do not use any of the data files other than `train.csv`. Only `data/train.csv` may be read in `train.py`; `data/eval.csv` is read by `harness.py` for evaluation only. Never read, open, or inspect `data/holdout.csv` or `data/2005.csv` (the source data, which contains the held-out rows) in any way. If you need a validation set (e.g. for early stopping), split it off `train.csv`.
 - Do not read, run, or reference `check_groundtruth.py`, `run_groundtruth_all.sh` or `plot_auc_history.py`, and do not read their outputs `groundtruth_all.tsv` and `auc_history.png`. These are human-only tools for post-hoc evaluation of experiments against the held-out test set. They are never part of the experiment loop. If you find yourself wanting to use them, stop and tell the human immediately — it means something has gone wrong with your understanding of the task.
 - Do not use git to peek at earlier results, especially into earlier versions of `results.tsv`, `groundtruth_all.tsv` or any other .tsv, .txt or .png files with earlier results. 
@@ -60,7 +60,7 @@ You are expected to actively search the web and read external resources througho
 - Don't blindly copy — adapt what you read to this specific dataset and problem
 - If a source suggests a technique, understand *why* it works before implementing it
 
-**Important:** Research time does not count against the experiment timeout. Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
+**Important:** Research time does not count against the per-run timeout (it does count against the 2-hour time budget). Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
 
 **The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such early stopping. Be creative! The only constraint is that the code runs without crashing and finishes in reasonable time.
 
@@ -126,14 +126,17 @@ Counts of rows in particular are not usable as features in this setup, in any fo
 
 ## Output format
 
-Once the script finishes it prints a summary like this:
+Once the run finishes it prints a summary like this:
 
 ```
 Training time: 0.2s
 Artifact: artifacts/cb4bfa5ac7cc84eee42470888843d097422ce13a.pkl (0.8 MB)
 Eval time: 30.1s
 Eval AUC: 0.7526
+Run time: 31.5s (ok)
 ```
+
+The status in the last line is `ok`, `crash`, or `timeout` (then preceded by `TIMEOUT: killed after 180s`).
 
 If it prints `WARNING: train.py has uncommitted changes, artifact not saved`, you ran it before committing; commit and run again, otherwise the experiment cannot be checked against the ground truth.
 
@@ -177,9 +180,9 @@ Also maintain a research log `research-log.md` with details of your thinking, hy
 
 The experiment runs on a dedicated branch (e.g. `mar5`).
 
-LOOP FOREVER:
+LOOP until the time budget is used up:
 
-1. Look at the git state: the current branch/commit we're on
+1. Check the clock: `python3 harness.py status`. If it prints `TIME IS UP`, stop the loop and wrap up (see **Time budget**). Otherwise look at the git state: the current branch/commit we're on
 2. **Choose your next experiment deliberately.** Before touching any code:
    - Review `results.tsv` and recent commits.
    - State a short **hypothesis**: what you are changing, why you think it will help, and (if applicable) which prior result motivates this step.
@@ -188,19 +191,25 @@ LOOP FOREVER:
    - If you haven't done web research in the last 10 experiments, or if your last 3+ experiments were discards, do research now before proposing your next change. See the **Research** section.
 3. Tune `train.py` with that experimental idea by directly hacking the code.
 4. git commit
-5. Run the experiment: `python3 train.py > run.log 2>&1` (redirect everything - do NOT use tee or let output flood your context)
+5. Run the experiment: `python3 harness.py run > run.log 2>&1` (redirect everything - do NOT use tee or let output flood your context). Run one experiment at a time.
 6. Read out the results: `grep "^Eval AUC:" run.log`
-7. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
+7. If the grep output is empty, the run crashed or timed out (or the time budget is used up). Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 8. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
 9. If Eval AUC improved (higher), you "advance" the branch, keeping the git commit
 10. If Eval AUC is equal or worse, you git reset back to where you started
 11. **Every 10 experiments**, pause and briefly synthesize what you have learned so far: what kinds of changes help, what kinds do not, what your current best theory is about what matters on this dataset, and what direction to try next. Write this synthesis as a short note in your context (not a file) to inform subsequent experiments.
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
-**Timeout**: Model training should take <1 minute. The row-by-row evaluation adds ~30s on top (more if `prepare` is slow per call). If a whole run exceeds 3 minutes, kill it and treat it as a failure (discard and revert).
+**Timeout**: Model training should take <1 minute. The row-by-row evaluation adds ~30s on top (more if `prepare` is slow per call). `harness.py run` kills a run after 3 minutes; treat a timeout as a failure (log it as `crash`, discard and revert).
 
 **Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
-**NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder - read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
+**Time budget**: You have 2 hours of wall-clock time from `python3 harness.py start`, counting everything: thinking, research, editing and runs. Within the budget, do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to keep working until the budget is used up. You are autonomous. If you run out of ideas, think harder - read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes.
 
-As an example use case, a user might leave you running while they sleep. If each experiment takes you ~2 minutes then you can run approx 30/hour, for a total of about 240 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
+When `python3 harness.py status` (or `python3 harness.py run`) prints `TIME IS UP`, do not start new experiments. Wrap up:
+
+1. Make sure the last experiment is logged in `results.tsv` and the branch is at the best kept commit.
+2. Add a final summary to `research-log.md`: best Eval AUC and its commit, what worked, what did not, and what you would try next.
+3. Run `python3 harness.py stop` as your very last action, then stop.
+
+With ~2 minutes per experiment you can run approx 50-60 experiments in the 2 hours.

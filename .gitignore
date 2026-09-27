@@ -1,6 +1,7 @@
 data/*
 !data/.gitkeep
 artifacts/
+timing/
 run.log
 results.tsv
 groundtruth_all.tsv
