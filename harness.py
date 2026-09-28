@@ -209,7 +209,7 @@ def cmd_run():
         limit = train_timeout_s if timed_out == "training" else eval_timeout_s
         print(f"TIMEOUT: {timed_out} killed after {limit}s")
     print(f"Run time: {run_s:.1f}s (training {train_s:.1f}s, eval {run_s - train_s:.1f}s, {status})")
-    sys.exit(proc.returncode or (124 if timed_out else 0))
+    sys.exit(124 if timed_out else proc.returncode)
 
 
 def cmd_report():

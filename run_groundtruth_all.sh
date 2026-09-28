@@ -47,7 +47,7 @@ while IFS=$'\t' read -r commit eval_auc status description; do
 
   echo "=== [$LINE_NUM] $commit | $status | $description ==="
 
-  # Only kept experiments are scored (crashes have no artifact; discards are optional extra cost)
+  # Only kept experiments are scored (crashes have no artifact; discards are skipped to save time)
   if [ "$status" != "keep" ]; then
     echo "  SKIP: status $status"
     echo -e "$commit\t$status\t$description\t$eval_auc\tN/A" >> "$OUTPUT_FILE"

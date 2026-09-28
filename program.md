@@ -34,7 +34,7 @@ You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times
 - Do not use any of the data files other than `train.csv`. Only `data/train.csv` may be read in `train.py`; `data/eval.csv` is read by `harness.py` for evaluation only. Never read, open, or inspect `data/holdout.csv` or the source data `2005.csv` (which contains the held-out rows) in any way, wherever it is stored. If you need a validation set (e.g. for early stopping), split it off `train.csv`.
 - Do not read, run, or reference `check_groundtruth.py`, `run_groundtruth_all.sh` or `plot_auc_history.py`, and do not read their outputs `groundtruth_all.tsv` and `auc_history.png`. These are human-only tools for post-hoc evaluation of experiments against the held-out test set. They are never part of the experiment loop. If you find yourself wanting to use them, stop and tell the human immediately — it means something has gone wrong with your understanding of the task.
 - Do not use git to peek at earlier results, especially into earlier versions of `results.tsv`, `groundtruth_all.tsv` or any other .tsv, .txt or .png files with earlier results. 
-- Do not peek into results in the `results`, `analysis` or `docs` folders and their sub-folders (archived earlier runs, including their ground truth scores).
+- Do not peek into results in the `results` folder and its sub-folders (archived earlier runs, including their ground truth scores).
 
 
 ## Research
@@ -62,7 +62,7 @@ You are expected to actively search the web and read external resources througho
 
 **Important:** Research time does not count against the per-run time limits (it does count against the 2-hour time budget). Take as long as you need to read and understand a resource before designing your next experiment. A well-researched experiment is worth more than three random ones.
 
-**The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such as early stopping. Be creative! The only constraint is that the code runs without crashing and finishes in reasonable time.
+**The goal is simple: get the highest AUC.** Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. Read XGBoost documentation online, search the web for how to tune XGBoost. Try out adding new elements such as early stopping. Be creative! Beyond the rules above, the only constraint is that the code runs without crashing and stays within the time limits (see **Timeout**).
 
 **Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome - that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 AUC improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 AUC improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 
@@ -198,7 +198,7 @@ LOOP until the time budget is used up:
 8. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
 9. If Eval AUC improved (higher), or stayed about equal with simpler code (see the **Simplicity criterion**), you "advance" the branch, keeping the git commit
 10. Otherwise (Eval AUC equal or worse, without a simplification), you git reset back to where you started
-11. **Every 10 experiments**, pause and briefly synthesize what you have learned so far: what kinds of changes help, what kinds do not, what your current best theory is about what matters on this dataset, and what direction to try next. Write this synthesis as a short note in your context (not a file) to inform subsequent experiments.
+11. **Every 10 experiments**, pause and briefly synthesize what you have learned so far: what kinds of changes help, what kinds do not, what your current best theory is about what matters on this dataset, and what direction to try next. Write this synthesis as a short section in `research-log.md` to inform subsequent experiments.
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
 **Timeout**: `harness.py run` enforces two limits. Training - everything in `train.py` before the `save_and_evaluate(model, prepare)` call (startup, loading data, `prepare(train)`, fitting) - is killed after **1 minute**. Evaluation - saving the artifact and scoring `eval.csv` row by row - is killed after **5 minutes**. Treat a timeout as a failure (log it as `crash`, discard and revert). Do not print `Training done, evaluating...` yourself: it is the harness's signal that training is over.
@@ -213,4 +213,4 @@ When `python3 harness.py status` (or `python3 harness.py run`) prints `TIME IS U
 2. Add a final summary to `research-log.md`: best Eval AUC and its commit, what worked, what did not, and what you would try next.
 3. Run `python3 harness.py stop` as your very last action, then stop. Leave `results.tsv`, `research-log.md` and `timing/` where they are: the human archives them after the run.
 
-With ~2 minutes per experiment you can run approx 50-60 experiments in the 2 hours.
+A run of the starter takes ~30s, most of it evaluation; with your own time for thinking, research and editing, that is roughly 2 minutes per experiment, or approx 50-60 experiments in the 2 hours.

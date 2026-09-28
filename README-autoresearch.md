@@ -9,7 +9,7 @@ The idea: give an AI agent a small but real XGBoost training setup and let it ex
 The repo is deliberately kept small:
 
 - **`prepare.py`** - builds train/eval/holdout.csv from the 2005 airline data, read straight from S3 (not stored locally). Human only; the AI agent must not read it.
-- **`train.py`** - the single file the agent edits. Contains the XGBoost model training. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. **This file is edited and iterated on by the agent**.
+- **`train.py`** - the single code file the agent edits (besides its own `results.tsv` and `research-log.md`). Contains the XGBoost model training. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. **This file is edited and iterated on by the agent**.
 - **`program.md`** - baseline instructions for one agent. Point your agent here and let it go. **This file is edited and iterated on by the human**.
 - **`harness.py`** - runs and times the experiments (`python3 harness.py run`), keeps the 2-hour experiment clock (`start`/`status`/`stop`), saves the trained model and `prepare` to `artifacts/<commit>.pkl` (gitignored) and scores `eval.csv` row by row. Not modified by the AI agent.
 - **`check_groundtruth.py`** - script to check the "ground truth" AUC on `holdout.csv` by the human, from the saved artifact (no retraining): `python3 check_groundtruth.py [commit]`. AI should not access this file.
@@ -29,7 +29,7 @@ python3 prepare.py
 python3 train.py
 ```
 
-If the above commands all work ok, your setup is working and you can go into autonomous research mode.
+If the above commands all work ok, your setup is working and you can go into autonomous research mode. (If `train.py` refuses because the experiment clock is running, a previous run left `timing/` behind: archive or delete it.)
 
 ## Running the agent
 
@@ -41,7 +41,7 @@ Hi have a look at program.md and let's kick off a new experiment! let's do the s
 
 The `program.md` file is essentially a super lightweight "skill".
 
-After the setup the agent starts the clock (`python3 harness.py start`), runs experiments for 2 hours, then wraps up and stops the clock (`python3 harness.py stop`). If an agent forgets to stop, the report counts up to the moment you run it, so run `python3 harness.py stop` yourself first.
+After the setup the agent starts the clock (`python3 harness.py start`), runs experiments for 2 hours, then wraps up and stops the clock (`python3 harness.py stop`). If an agent forgets to stop, the clock keeps running and the report counts up to the moment you run it; run `python3 harness.py stop` yourself as soon as you notice, so the total stops growing.
 
 ## After the run
 
@@ -74,4 +74,4 @@ results/               - archived runs, one folder per run (human only)
 ## Design choices
 
 - **Single file to modify.** The agent only touches `train.py`. This keeps the scope manageable and diffs reviewable.
-- **Self-contained.** No external dependencies beyond XGBoost, pandas (training and data prep), scikit-learn, cloudpickle and matplotlib (plot). No distributed training, no complex configs. 
+- **Self-contained.** No external dependencies beyond XGBoost, pandas (training and data prep), scikit-learn, cloudpickle and matplotlib (plot). No distributed training, no complex configs. The only network access needed is `prepare.py` reading the source data from S3.
