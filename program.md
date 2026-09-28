@@ -20,10 +20,10 @@ Once you get confirmation, start the experiment clock with `python3 harness.py s
 
 ## Experimentation
 
-You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times it, kills it if it exceeds the time limits (1 minute for training, 5 minutes for evaluation, see **Timeout**), and refuses to start once the time budget is used up. Do not run `python3 train.py` directly while the clock is running (it will refuse).
+You launch an experiment as: `python3 harness.py run`. It runs `train.py`, times it, kills it if it exceeds the time limits (1 minute for training, 5 minutes for evaluation, see **Timeout**), and refuses to start once the time budget is used up. Do not run `python3 train.py` directly while the clock is running (it will refuse once training is done, before evaluating).
 
 **What you CAN do:**
-- Modify `train.py` - this is the only file you edit. Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. You can also implement new features such as early stopping etc.
+- Modify `train.py` - this is the only code file you edit (besides your own `results.tsv` and `research-log.md`). Everything is fair game that will lead to a model that generalizes on unseen data: data preparation, feature engineering, choosing hyperparameters, and model training. You can also implement new features such as early stopping etc.
 - Search the web and read external resources. This is not optional — you MUST do research before relying solely on your own intuition. See the **Research** section below.
 
 **What you CANNOT do:**
