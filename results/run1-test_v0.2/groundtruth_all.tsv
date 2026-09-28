@@ -1,0 +1,61 @@
+commit	status	description	eval_auc	holdout_auc
+fdbad98	keep	baseline (30 trees depth 6 lr 0.1)	0.7203	0.7155
+19e81e4	keep	early stopping 10% val; depth 8 lr 0.05 (best_it 237)	0.7321	0.7289
+f850823	keep	subsample 0.8 colsample_bytree 0.8 (best_it 230)	0.7393	0.7365
+7ee3a70	keep	max_cat_threshold 16 (best_it 507)	0.7419	0.7380
+9d74daa	keep	max_cat_threshold 4 (best_it 894)	0.7450	0.7406
+4622093	discard	max_cat_threshold 1	0.6646	N/A
+ce3aca1	discard	OOF row-hash-fold target encoding date x origin/dest/carrier (val 0.768 but eval drops)	0.7147	N/A
+cef442f	discard	OOF TE with tables fit without val rows: honest val 0.727, best_it 14	0.7201	N/A
+478a01d	keep	TE date x origin/dest/carrier on disjoint 50% split, model on other 50% (best_it 430)	0.7525	0.7492
+3559916	discard	add TE keys date x origin x 4h block, date x route	0.7517	N/A
+8f873dc	keep	both halves: swap TE-table/model roles, average 2 models	0.7609	0.7565
+429db26	keep	K=3 parts: model fit on 2/3, TE tables from other 1/3, average 3 models	0.7640	0.7589
+787e5b9	discard	K=5 parts	0.7626	N/A
+17f0fcb	discard	add TE key date (Month x DayofMonth)	0.7633	N/A
+ba70753	keep	depth 10	0.7649	0.7601
+9ef21d9	discard	lr 0.03 (equal)	0.7649	N/A
+7412f25	discard	TE smoothing 5	0.7640	N/A
+a2d6c7f	discard	TE smoothing 50	0.7647	N/A
+2a15c7e	keep	TE static pairs: route, carrier x origin, origin/dest/carrier x hour (eval 168s)	0.7663	0.7618
+b078617	keep	build TE keys once per prepare call (eval 168s -> 99s)	0.7663	0.7618
+9289413	keep	TE: carrier x route, route x hour, origin x weekday, month x origin (eval 131s)	0.7670	0.7618
+df09b6b	keep	faster prepare: plain-Python keys + dict lookups (eval 131s -> 39s)	0.7670	0.7618
+10cc0b6	keep	bag: 3-part split x 2 seeds = 6 models (train 54s!)	0.7683	0.7634
+91b2486	discard	early_stopping_rounds 50 (train 38s but -0.0005)	0.7678	N/A
+efbae97	crash	prepare train once and slice per part (stratify bug)	0.0000	N/A
+09631d2	keep	prepare train once + slice per part, stratify fix (train 54s -> 49s, same AUC)	0.7683	0.7634
+2687476	discard	colsample_bytree 0.6	0.7680	N/A
+9240ea5	keep	drop raw Origin/Dest categoricals from models (train 49s -> 32s)	0.7686	0.7639
+09a2c76	keep	default max_cat_threshold (only low-card cats left)	0.7691	0.7639
+334db8a	discard	3 split seeds (9 models): +0.0004 but training 51s, too close to 60s limit	0.7695	N/A
+957a32a	discard	TE key date x hour	0.7688	N/A
+19a3fee	keep	TE lookups of previous/next day at same origin/dest	0.7699	0.7648
+b0b9076	discard	also +-2 days (+0.0002, +6s training; not worth it)	0.7701	N/A
+b08bad8	discard	min_child_weight 5 (equal AUC, training 38s -> 31s)	0.7699	N/A
+1dcb4bc	keep	min_child_weight 5 + 3 split seeds (9 models), train 47s	0.7704	0.7653
+10999be	discard	previous/next-day carrier rates (equal)	0.7704	N/A
+4f71d30	discard	hierarchical smoothing of date keys toward day rate (+Date feature)	0.7685	N/A
+b26581c	discard	drop raw Month/DayofMonth from models	0.7685	N/A
+68d7caa	discard	reg_lambda 5 (+0.0001 noise, slower)	0.7705	N/A
+17237b2	keep	max_bin 64 (slightly faster)	0.7706	0.7653
+235052c	discard	depth 12	0.7704	N/A
+74e3575	discard	pooled 3-day window rates at origin/dest (equal)	0.7706	N/A
+818f530	discard	early-stopping val 5%	0.7703	N/A
+e9cac85	keep	TE key: scheduled flight (carrier+route+CRSDepTime)	0.7710	0.7657
+30a45fa	keep	TE key: carrier x origin x hour	0.7712	0.7661
+8e76671	discard	TE key: origin x weekday x hour	0.7707	N/A
+09a9b8e	discard	vary depth 8/10/12 by split seed	0.7710	N/A
+fcdd061	discard	numeric day-of-year feature	0.7711	N/A
+436a7c0	discard	average in log-odds space (equal)	0.7712	N/A
+de9e083	discard	predict with TE tables fit on all of train (distribution shift)	0.7691	N/A
+3c9a647	keep	TE keys: origin, dest (single airports)	0.7716	0.7663
+7fe0e0e	discard	TE keys: month x dest, dest x weekday (equal)	0.7716	N/A
+10d6952	keep	ablation: drop origin x weekday, month x origin (equal AUC, simpler, faster)	0.7716	0.7663
+8c8b36b	keep	ablation: drop carrier x hour, carrier x route (simpler, +0.0001)	0.7717	0.7663
+ce5d18f	discard	ablation: drop route x hour	0.7715	N/A
+afd645f	discard	lr 0.07 + 4 split seeds (equal, slower)	0.7717	N/A
+5afbe11	discard	TE smoothing 10 (equal)	0.7717	N/A
+06c50fb	discard	subsample 0.7	0.7712	N/A
+9c4ab6d	discard	ablation: drop dest x hour	0.7711	N/A
+772bb72	discard	TE key: date x origin x carrier	0.7716	N/A
