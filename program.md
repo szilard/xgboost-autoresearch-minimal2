@@ -191,7 +191,7 @@ LOOP until the time budget is used up:
    - **Do not** run near-duplicate experiments unless you can state exactly what is different and why it matters. Avoid random-walk behavior and cosmetic variations of the same idea.
    - If you haven't done web research in the last 10 experiments, or if you hit a plateau (3+ consecutive discards with <0.001 movement), do research now before proposing your next change. See the **Research** section.
 3. Tune `train.py` with that experimental idea by directly hacking the code.
-4. git commit
+4. git commit `train.py` only (`results.tsv`, `research-log.md`, `run.log` and `timing/` stay uncommitted; the human archives or deletes them after the run)
 5. Run the experiment: `python3 harness.py run > run.log 2>&1` (redirect everything - do NOT use tee or let output flood your context). Run one experiment at a time.
 6. Read out the results: `grep "^Eval AUC:" run.log`
 7. If the grep output is empty, the run crashed or timed out (or the time budget is used up). Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
@@ -211,6 +211,6 @@ When `python3 harness.py status` (or `python3 harness.py run`) prints `TIME IS U
 
 1. Make sure the last experiment is logged in `results.tsv` and the branch is at the best kept commit.
 2. Add a final summary to `research-log.md`: best Eval AUC and its commit, what worked, what did not, and what you would try next.
-3. Run `python3 harness.py stop` as your very last action, then stop.
+3. Run `python3 harness.py stop` as your very last action, then stop. Leave `results.tsv`, `research-log.md` and `timing/` where they are: the human archives them after the run.
 
 With ~2 minutes per experiment you can run approx 50-60 experiments in the 2 hours.

@@ -51,6 +51,8 @@ python3 harness.py report   # total time, split into XGBoost training / evaluati
 python3 plot_auc_history.py # eval vs holdout AUC -> auc_history.png
 ```
 
+Then you (the human, not the agent) move the run's outputs (`results.tsv`, `research-log.md`, `groundtruth_all.tsv`, `auc_history.png`, `timing/`, and optionally the final `train.py` and selected artifacts) into `results/<run-name>/` and commit them there, or delete them, so the next run starts clean.
+
 The timing works the same for any agent (Claude Code, Codex, ...): `harness.py` logs the wall-clock time of every run to `timing/runs.tsv`, and everything else between `start` and `stop` is the AI's time (token generation, tool calls, web research, API latency).
 
 ## Project structure
@@ -65,7 +67,8 @@ plot_auc_history.py    - plot of eval vs holdout AUC (human only)
 program.md             - agent instructions
 data/                  - train/eval/holdout.csv splits (gitignored)
 artifacts/             - saved model + prepare per commit (gitignored)
-timing/                - experiment clock and per-run timings (gitignored)
+timing/                - experiment clock and per-run timings (not gitignored, the human moves it to results/ or deletes it after a run)
+results/               - archived runs, one folder per run (human only)
 ```
 
 ## Design choices
