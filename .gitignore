@@ -5,7 +5,7 @@ timing/
 run.log
 results.tsv
 groundtruth_all.tsv
-auc_history.png
+#auc_history.png
 research-log.md
 
 
