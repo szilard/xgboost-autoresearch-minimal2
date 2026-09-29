@@ -2,6 +2,10 @@
 
 This is a follow-up to [xgboost-autoresearch](https://github.com/szilard/xgboost-autoresearch).
 
+It provides a "minimal" building block that can be used by an orchestrator such as
+[xgboost-autoresearch-minimal2-runs](https://github.com/szilard/xgboost-autoresearch-minimal2-runs)
+to run repeated trials of XGBoost tuning with various agents/LLMs.
+
 An AI agent (Claude Code, Codex, ...) autonomously improves an XGBoost model for a fixed 2-hour budget, following the instructions in `program.md`:
 
 - **Task:** predict whether a flight departs 15+ minutes late (2005 airline data, balanced, 200K train / 50K eval / 50K holdout rows), measured by AUC.
