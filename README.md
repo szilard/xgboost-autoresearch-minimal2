@@ -1,6 +1,6 @@
 ## Optimizing XGBoost Machine Learning Models with AI Agents
 
-**TL;DR:** A minimal setup where an AI coding agent (Claude Code, Codex, ...) autonomously tunes an XGBoost model for 2 hours, with its gains checked afterwards on a held-out test set it never sees, for comparing how well different agents/LLMs do ML research.
+**TL;DR:** A minimal setup where an AI coding agent (e.g. Claude Code, Codex, ...) autonomously tunes an XGBoost model, with its gains checked afterwards on a held-out test set, and which can be used for comparing how well different agents/LLMs do ML research.
 
 This is a follow-up to [xgboost-autoresearch](https://github.com/szilard/xgboost-autoresearch).
 
